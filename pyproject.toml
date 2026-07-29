@@ -1,0 +1,35 @@
+[project]
+name = "matching-service"
+version = "0.1.0"
+description = "Neolithic exposition-deal matching MLOps service"
+requires-python = ">=3.11"
+dependencies = [
+  "pandas",
+  "pyarrow",
+  "sqlalchemy",
+  "psycopg2-binary",
+  "openpyxl",
+  "scikit-learn",
+  "catboost",
+  "mlflow",
+  "fastapi",
+  "uvicorn",
+  "streamlit",
+  "python-dotenv",
+  "rapidfuzz",
+  "pydantic",
+  "python-pptx",
+  "httpx",
+  "prometheus-client",
+  "sentence-transformers",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "jupyter", "nbformat"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
