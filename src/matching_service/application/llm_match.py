@@ -231,11 +231,7 @@ def _candidate_analysis(
         pd.Series([candidate.get("ensemble_score")]),
         errors="coerce",
     ).iloc[0]
-    delta = (
-        float(top_score) - float(score)
-        if top_score is not None and pd.notna(score)
-        else None
-    )
+    delta = float(top_score) - float(score) if top_score is not None and pd.notna(score) else None
     return evidence, conflicts, delta
 
 
@@ -248,22 +244,17 @@ def _cluster_candidate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ordered_members = sorted(members, key=_row_order_key)
         representative = ordered_members[0].copy()
         representative["listing_physical_key"] = physical_key
-        representative["cluster_flat_ids"] = [
-            str(member["flat_id"]) for member in ordered_members
-        ]
+        representative["cluster_flat_ids"] = [str(member["flat_id"]) for member in ordered_members]
         representative["cluster_advert_ids"] = [
             str(member["advert_id"])
             for member in ordered_members
-            if member.get("advert_id") is not None
-            and not pd.isna(member.get("advert_id"))
+            if member.get("advert_id") is not None and not pd.isna(member.get("advert_id"))
         ]
         representative["physical_cluster_size"] = len(ordered_members)
         representatives.append(representative)
     representatives.sort(key=_row_order_key)
     top_score_raw = pd.to_numeric(
-        pd.Series(
-            [representatives[0].get("ensemble_score") if representatives else None]
-        ),
+        pd.Series([representatives[0].get("ensemble_score") if representatives else None]),
         errors="coerce",
     ).iloc[0]
     top_score = float(top_score_raw) if pd.notna(top_score_raw) else None
@@ -283,11 +274,7 @@ def _cluster_candidate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _group_user_prompt(rows: list[dict[str, Any]]) -> str:
     first = rows[0]
     payload = {
-        "deal": {
-            key: _json_value(first.get(key))
-            for key in DEAL_PROMPT_COLUMNS
-            if key in first
-        },
+        "deal": {key: _json_value(first.get(key)) for key in DEAL_PROMPT_COLUMNS if key in first},
         "number_provenance": {
             "object_number_egrn": _json_value(first.get("object_number_egrn")),
             "object_number_pd": _json_value(first.get("object_number_pd")),
@@ -295,11 +282,7 @@ def _group_user_prompt(rows: list[dict[str, Any]]) -> str:
         },
         "candidates": [
             {
-                **{
-                    key: _json_value(row.get(key))
-                    for key in CANDIDATE_PROMPT_COLUMNS
-                    if key in row
-                },
+                **{key: _json_value(row.get(key)) for key in CANDIDATE_PROMPT_COLUMNS if key in row},
                 "cluster_flat_ids": row.get("cluster_flat_ids", []),
                 "cluster_advert_ids": row.get("cluster_advert_ids", []),
                 "physical_cluster_size": row.get("physical_cluster_size", 1),
@@ -332,7 +315,7 @@ def _review(reason: str) -> dict[str, Any]:
 
 
 def parse_llm_json(text: str) -> dict[str, Any]:
-    match = re.search(r"\{.*\}", text.strip(), flags=re.DOTALL)
+    match = re.search(r"\{.*\}", text.strip(), flags=re.S)
     if not match:
         return _review("no_json")
     try:
@@ -365,11 +348,7 @@ def configured_models(
     models: list[str] | None = None,
     use_voting: bool = False,
 ) -> list[str]:
-    requested = models or [
-        value.strip()
-        for value in os.getenv("MATCH_LLM_MODELS", "").split(",")
-        if value.strip()
-    ]
+    requested = models or [value.strip() for value in os.getenv("MATCH_LLM_MODELS", "").split(",") if value.strip()]
     if not requested and (model or os.getenv("MATCH_LLM_MODEL")):
         requested = [model or os.environ["MATCH_LLM_MODEL"]]
     available = client.list_models()
@@ -418,16 +397,12 @@ def _query_single_model(
             parsed = _review("invalid_selected_flat_id")
         if parsed["decision"] == "match":
             selected = parsed["selected_flat_id"]
-            selected_row = next(
-                row for row in prepared_rows if str(row["flat_id"]) == str(selected)
-            )
+            selected_row = next(row for row in prepared_rows if str(row["flat_id"]) == str(selected))
             parsed["selected_cluster_flat_ids"] = selected_row.get(
                 "cluster_flat_ids",
                 [str(selected)],
             )
-    invalid_ranking = [
-        value for value in parsed.get("ranking", []) if str(value) not in candidate_ids
-    ]
+    invalid_ranking = [value for value in parsed.get("ranking", []) if str(value) not in candidate_ids]
     if invalid_ranking:
         parsed = _review("invalid_ranking_flat_id")
     return parsed | {
@@ -438,32 +413,18 @@ def _query_single_model(
 
 
 def _consensus(results: list[dict[str, Any]]) -> dict[str, Any]:
-    valid = [
-        result for result in results if result.get("decision") in {"match", "no_match"}
-    ]
+    valid = [result for result in results if result.get("decision") in {"match", "no_match"}]
     quorum = len(results) // 2 + 1
     positive = [
         result
         for result in valid
-        if result["decision"] == "match"
-        and result.get("selected_flat_id")
-        and float(result["confidence"]) >= 0.7
+        if result["decision"] == "match" and result.get("selected_flat_id") and float(result["confidence"]) >= 0.7
     ]
-    negative = [
-        result
-        for result in valid
-        if result["decision"] == "no_match" and float(result["confidence"]) >= 0.7
-    ]
+    negative = [result for result in valid if result["decision"] == "no_match" and float(result["confidence"]) >= 0.7]
     selected_counts = Counter(str(result["selected_flat_id"]) for result in positive)
-    selected_flat_id, selected_count = (
-        selected_counts.most_common(1)[0] if selected_counts else (None, 0)
-    )
+    selected_flat_id, selected_count = selected_counts.most_common(1)[0] if selected_counts else (None, 0)
     if selected_count >= quorum:
-        agreeing = [
-            result
-            for result in positive
-            if str(result["selected_flat_id"]) == selected_flat_id
-        ]
+        agreeing = [result for result in positive if str(result["selected_flat_id"]) == selected_flat_id]
         decision = "match"
         match_value: bool | None = True
     elif len(negative) >= quorum:
@@ -547,15 +508,11 @@ def llm_resolve_ambiguous(
             models=models,
             use_voting=use_voting,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         out.attrs["llm_skipped"] = str(exc)
         return out
 
-    mask = (
-        out.get("needs_review", pd.Series(False, index=out.index))
-        .fillna(False)
-        .astype(bool)
-    )
+    mask = out.get("needs_review", pd.Series(False, index=out.index)).fillna(False).astype(bool)
     review_indices = out.index[mask].tolist()
     if "deal_id" in out and out["deal_id"].notna().any():
         group_keys = out.loc[review_indices, "deal_id"].drop_duplicates().tolist()
@@ -573,41 +530,29 @@ def llm_resolve_ambiguous(
         max_candidates = int(os.getenv("MATCH_LLM_MAX_CANDIDATES", "5"))
         rows = _ordered_group(group).head(max_candidates).to_dict(orient="records")
         with ThreadPoolExecutor(max_workers=len(target_models)) as executor:
-            futures = [
-                executor.submit(_query_single_model, client, model_name, rows)
-                for model_name in target_models
-            ]
+            futures = [executor.submit(_query_single_model, client, model_name, rows) for model_name in target_models]
             results: list[dict[str, Any]] = []
             for model_name, future in zip(target_models, futures, strict=True):
                 try:
                     results.append(future.result())
-                except Exception as exc:  # noqa: BLE001
-                    results.append(
-                        _review(f"error:{type(exc).__name__}") | {"model": model_name}
-                    )
+                except Exception as exc:
+                    results.append(_review(f"error:{type(exc).__name__}") | {"model": model_name})
 
         final = results[0] if len(results) == 1 else _consensus(results)
         target_index = review_index
         if final["decision"] == "match":
             selected_ids = {
                 str(value)
-                for value in (
-                    final.get("selected_cluster_flat_ids")
-                    or [final.get("selected_flat_id")]
-                )
+                for value in (final.get("selected_cluster_flat_ids") or [final.get("selected_flat_id")])
                 if value is not None
             }
-            selected = group.index[
-                group["flat_id"].astype(str).isin(selected_ids)
-            ].tolist()
+            selected = group.index[group["flat_id"].astype(str).isin(selected_ids)].tolist()
             if not selected:
                 final = _review("selected_flat_id_not_unique") | {"votes": results}
             else:
                 target_index = selected[0]
                 other_review = [
-                    index
-                    for index in group.index
-                    if index != target_index and bool(out.at[index, "needs_review"])
+                    index for index in group.index if index != target_index and bool(out.at[index, "needs_review"])
                 ]
                 for index in other_review:
                     out.at[index, "llm_match"] = False

@@ -76,44 +76,26 @@ def _numeric(series: pd.Series) -> pd.Series:
 def _same_when_present(left: pd.Series, right: pd.Series) -> pd.Series:
     left_norm = left.map(normalize_identifier)
     right_norm = right.map(normalize_identifier)
-    return ((left_norm != "") & (right_norm != "") & (left_norm == right_norm)).astype(
-        int
-    )
+    return ((left_norm != "") & (right_norm != "") & (left_norm == right_norm)).astype(int)
 
 
 def _physical_key(frame: pd.DataFrame) -> pd.Series:
-    building = (
-        frame["building_id_exp"].fillna(frame["location_id_exp"]).fillna("").astype(str)
-    )
+    building = frame["building_id_exp"].fillna(frame["location_id_exp"]).fillna("").astype(str)
     number = frame["flat_number_exp"].map(normalize_identifier)
     floor = frame["floor_exp"].map(normalize_identifier)
     area = _numeric(frame["area_exp"]).round(2).astype("string").fillna("")
-    fallback = (
-        frame["source_id"].fillna("").astype(str)
-        + ":"
-        + frame["advert_id"].fillna("").astype(str)
-    )
+    fallback = frame["source_id"].fillna("").astype(str) + ":" + frame["advert_id"].fillna("").astype(str)
     structured = building + ":" + number + ":" + floor + ":" + area
     return structured.where(number != "", fallback)
 
 
 def add_pair_features(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
-    out["same_building"] = _same_when_present(
-        out["building_id_deal"], out["building_id_exp"]
-    )
-    out["same_complex"] = _same_when_present(
-        out["complex_id_deal"], out["complex_id_exp"]
-    )
-    out["same_flat_number"] = _same_when_present(
-        out["flat_number_deal"], out["flat_number_exp"]
-    )
-    out["same_pd_number"] = _same_when_present(
-        out["planned_premise_number"], out["flat_number_exp"]
-    )
-    out["same_registry_number"] = _same_when_present(
-        out["object_number_egrn"], out["flat_number_exp"]
-    )
+    out["same_building"] = _same_when_present(out["building_id_deal"], out["building_id_exp"])
+    out["same_complex"] = _same_when_present(out["complex_id_deal"], out["complex_id_exp"])
+    out["same_flat_number"] = _same_when_present(out["flat_number_deal"], out["flat_number_exp"])
+    out["same_pd_number"] = _same_when_present(out["planned_premise_number"], out["flat_number_exp"])
+    out["same_registry_number"] = _same_when_present(out["object_number_egrn"], out["flat_number_exp"])
 
     deal_number = out["flat_number_deal"].map(normalize_identifier)
     listing_number = out["flat_number_exp"].map(normalize_identifier)
@@ -126,19 +108,11 @@ def add_pair_features(frame: pd.DataFrame) -> pd.DataFrame:
 
     out["area_diff"] = (_numeric(out["area_deal"]) - _numeric(out["area_exp"])).abs()
     out["pd_area_diff"] = (_numeric(out["pd_area"]) - _numeric(out["area_exp"])).abs()
-    out["living_area_diff"] = (
-        _numeric(out["pd_living_area"]) - _numeric(out["living_area_exp"])
-    ).abs()
+    out["living_area_diff"] = (_numeric(out["pd_living_area"]) - _numeric(out["living_area_exp"])).abs()
     out["floor_diff"] = (_numeric(out["floor_deal"]) - _numeric(out["floor_exp"])).abs()
-    out["pd_floor_diff"] = (
-        _numeric(out["pd_floor"]) - _numeric(out["floor_exp"])
-    ).abs()
-    out["same_rooms"] = _same_when_present(
-        out["room_count_deal"], out["room_count_exp"]
-    )
-    out["same_pd_rooms"] = _same_when_present(
-        out["pd_room_count"], out["room_count_exp"]
-    )
+    out["pd_floor_diff"] = (_numeric(out["pd_floor"]) - _numeric(out["floor_exp"])).abs()
+    out["same_rooms"] = _same_when_present(out["room_count_deal"], out["room_count_exp"])
+    out["same_pd_rooms"] = _same_when_present(out["pd_room_count"], out["room_count_exp"])
     out["same_entrance"] = _same_when_present(out["entrance_deal"], out["entrance_exp"])
     out["same_position_on_floor"] = _same_when_present(
         out["number_on_floor_deal"],
@@ -155,15 +129,11 @@ def add_pair_features(frame: pd.DataFrame) -> pd.DataFrame:
     pd_posted_at = pd.to_datetime(out["pd_posted_at"], errors="coerce", utc=True)
     window_start = contract_date - pd.DateOffset(months=3)
 
-    out["created_before_contract"] = (
-        (created_at < contract_date).fillna(False).astype(int)
-    )
+    out["created_before_contract"] = (created_at < contract_date).fillna(False).astype(int)
     out["actual_in_window"] = (actualized_at >= window_start).fillna(False).astype(int)
     out["days_created_to_contract"] = (contract_date - created_at).dt.days
     out["days_actualized_to_contract"] = (actualized_at - contract_date).dt.days
-    out["pd_published_before_contract"] = (
-        (pd_posted_at <= contract_date).fillna(False).astype(int)
-    )
+    out["pd_published_before_contract"] = (pd_posted_at <= contract_date).fillna(False).astype(int)
     out["days_pd_to_contract"] = (contract_date - pd_posted_at).dt.days
 
     out["listing_physical_key"] = _physical_key(out)
@@ -212,12 +182,8 @@ def _rank_hard_candidates(deal: pd.Series, candidates: pd.DataFrame) -> pd.DataF
     if candidates.empty:
         return candidates
     ranked = candidates.copy()
-    deal_area = pd.to_numeric(pd.Series([deal.get("area_deal")]), errors="coerce").iloc[
-        0
-    ]
-    deal_floor = pd.to_numeric(
-        pd.Series([deal.get("floor_deal")]), errors="coerce"
-    ).iloc[0]
+    deal_area = pd.to_numeric(pd.Series([deal.get("area_deal")]), errors="coerce").iloc[0]
+    deal_floor = pd.to_numeric(pd.Series([deal.get("floor_deal")]), errors="coerce").iloc[0]
     ranked["_area"] = (_numeric(ranked["area_exp"]) - deal_area).abs()
     ranked["_floor"] = (_numeric(ranked["floor_exp"]) - deal_floor).abs()
     ranked["_room_penalty"] = 1 - _same_when_present(
@@ -246,32 +212,16 @@ def build_candidate_dataset(
     flats = flats.drop_duplicates("flat_id").copy()
     flats["_building_key"] = flats["building_id_exp"].map(normalize_identifier)
     flats["_complex_key"] = flats["complex_id_exp"].map(normalize_identifier)
-    flats["_created_dt"] = pd.to_datetime(
-        flats["created_at"], errors="coerce", utc=True
-    )
-    flats["_actualized_dt"] = pd.to_datetime(
-        flats["actualized_at"], errors="coerce", utc=True
-    )
-    flats_by_building = {
-        key: group
-        for key, group in flats[flats["_building_key"] != ""].groupby("_building_key")
-    }
-    flats_by_complex = {
-        key: group
-        for key, group in flats[flats["_complex_key"] != ""].groupby("_complex_key")
-    }
-    full = weak_labels[weak_labels["label"] == 1][
-        ["deal_id", "flat_id", "coincidence_degree"]
-    ].copy()
-    partial = weak_labels[weak_labels["label"].isna()][
-        ["deal_id", "flat_id", "coincidence_degree"]
-    ].copy()
+    flats["_created_dt"] = pd.to_datetime(flats["created_at"], errors="coerce", utc=True)
+    flats["_actualized_dt"] = pd.to_datetime(flats["actualized_at"], errors="coerce", utc=True)
+    flats_by_building = {key: group for key, group in flats[flats["_building_key"] != ""].groupby("_building_key")}
+    flats_by_complex = {key: group for key, group in flats[flats["_complex_key"] != ""].groupby("_complex_key")}
+    full = weak_labels[weak_labels["label"] == 1][["deal_id", "flat_id", "coincidence_degree"]].copy()
+    partial = weak_labels[weak_labels["label"].isna()][["deal_id", "flat_id", "coincidence_degree"]].copy()
 
     deal_index = deals.set_index("deal_id", drop=False)
     flat_index = flats.set_index("flat_id", drop=False)
-    positive_pairs = full[
-        full["deal_id"].isin(deal_index.index) & full["flat_id"].isin(flat_index.index)
-    ].copy()
+    positive_pairs = full[full["deal_id"].isin(deal_index.index) & full["flat_id"].isin(flat_index.index)].copy()
     positive_pairs["label"] = 1
     positive_pairs["label_source"] = "existing_full_rule"
     positive_pairs["sample_role"] = "trainable"
@@ -295,9 +245,7 @@ def build_candidate_dataset(
             continue
         pool = _rank_hard_candidates(deal, _temporal_candidates(deal, raw_pool))
         positive_flat_ids = set(group["flat_id"].astype(str))
-        positive_flats = flats[
-            flats["flat_id"].astype(str).isin(positive_flat_ids)
-        ].copy()
+        positive_flats = flats[flats["flat_id"].astype(str).isin(positive_flat_ids)].copy()
         if positive_flats.empty:
             continue
         positive_keys = set(
@@ -378,14 +326,7 @@ def build_candidate_dataset(
             return pairs
         return add_pair_features(
             pairs.merge(deals, on="deal_id", how="inner").merge(
-                flats.drop(
-                    columns=[
-                        "_building_key",
-                        "_complex_key",
-                        "_created_dt",
-                        "_actualized_dt",
-                    ]
-                ),
+                flats.drop(columns=["_building_key", "_complex_key", "_created_dt", "_actualized_dt"]),
                 on="flat_id",
                 how="inner",
             )
@@ -407,20 +348,10 @@ def generate_inference_candidates(
     flats = flats.drop_duplicates("flat_id").copy()
     flats["_building_key"] = flats["building_id_exp"].map(normalize_identifier)
     flats["_complex_key"] = flats["complex_id_exp"].map(normalize_identifier)
-    flats["_created_dt"] = pd.to_datetime(
-        flats["created_at"], errors="coerce", utc=True
-    )
-    flats["_actualized_dt"] = pd.to_datetime(
-        flats["actualized_at"], errors="coerce", utc=True
-    )
-    by_building = {
-        key: group
-        for key, group in flats[flats["_building_key"] != ""].groupby("_building_key")
-    }
-    by_complex = {
-        key: group
-        for key, group in flats[flats["_complex_key"] != ""].groupby("_complex_key")
-    }
+    flats["_created_dt"] = pd.to_datetime(flats["created_at"], errors="coerce", utc=True)
+    flats["_actualized_dt"] = pd.to_datetime(flats["actualized_at"], errors="coerce", utc=True)
+    by_building = {key: group for key, group in flats[flats["_building_key"] != ""].groupby("_building_key")}
+    by_complex = {key: group for key, group in flats[flats["_complex_key"] != ""].groupby("_complex_key")}
 
     rows: list[pd.DataFrame] = []
     for _, deal in deals.iterrows():
@@ -475,49 +406,29 @@ def group_temporal_split(
         negatives=lambda values: int((values.astype(int) == 0).sum()),
     )
     invalid_holdout_deals = set(
-        holdout_label_counts.index[
-            (holdout_label_counts["positives"] != 1)
-            | (holdout_label_counts["negatives"] < 1)
-        ]
+        holdout_label_counts.index[(holdout_label_counts["positives"] != 1) | (holdout_label_counts["negatives"] < 1)]
     )
-    holdout = holdout_candidate[
-        ~holdout_candidate["deal_id"].isin(invalid_holdout_deals)
-    ]
+    holdout = holdout_candidate[~holdout_candidate["deal_id"].isin(invalid_holdout_deals)]
 
-    overlapping_keys = set(pre_train["listing_physical_key"]) & set(
-        holdout["listing_physical_key"]
-    )
+    overlapping_keys = set(pre_train["listing_physical_key"]) & set(holdout["listing_physical_key"])
     overlap_train = pre_train[pre_train["listing_physical_key"].isin(overlapping_keys)]
-    positive_overlap_deals = set(
-        overlap_train.loc[overlap_train["label"].astype(int) == 1, "deal_id"]
-    )
+    positive_overlap_deals = set(overlap_train.loc[overlap_train["label"].astype(int) == 1, "deal_id"])
     train_candidate = pre_train[
-        ~pre_train["deal_id"].isin(positive_overlap_deals)
-        & ~pre_train["listing_physical_key"].isin(overlapping_keys)
+        ~pre_train["deal_id"].isin(positive_overlap_deals) & ~pre_train["listing_physical_key"].isin(overlapping_keys)
     ]
 
     label_counts = train_candidate.groupby("deal_id")["label"].agg(
         positives=lambda values: int((values.astype(int) == 1).sum()),
         negatives=lambda values: int((values.astype(int) == 0).sum()),
     )
-    invalid_train_deals = set(
-        label_counts.index[
-            (label_counts["positives"] != 1) | (label_counts["negatives"] < 1)
-        ]
-    )
+    invalid_train_deals = set(label_counts.index[(label_counts["positives"] != 1) | (label_counts["negatives"] < 1)])
     train = train_candidate[~train_candidate["deal_id"].isin(invalid_train_deals)]
     excluded_indices = (
         set(invalid_date.index)
-        | set(
-            holdout_candidate[
-                holdout_candidate["deal_id"].isin(invalid_holdout_deals)
-            ].index
-        )
+        | set(holdout_candidate[holdout_candidate["deal_id"].isin(invalid_holdout_deals)].index)
         | set(overlap_train.index)
         | set(pre_train[pre_train["deal_id"].isin(positive_overlap_deals)].index)
-        | set(
-            train_candidate[train_candidate["deal_id"].isin(invalid_train_deals)].index
-        )
+        | set(train_candidate[train_candidate["deal_id"].isin(invalid_train_deals)].index)
     )
     excluded = data.loc[sorted(excluded_indices)]
 
@@ -534,9 +445,7 @@ def group_temporal_split(
             positives=lambda values: int((values.astype(int) == 1).sum()),
             negatives=lambda values: int((values.astype(int) == 0).sum()),
         )
-        if not (
-            (split_counts["positives"] == 1) & (split_counts["negatives"] >= 1)
-        ).all():
+        if not ((split_counts["positives"] == 1) & (split_counts["negatives"] >= 1)).all():
             raise AssertionError(f"{name} contains incomplete candidate groups")
     return DatasetSplit(
         train=train,

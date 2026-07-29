@@ -61,45 +61,27 @@ def resolve_cascade_options(
 ) -> dict[str, Any]:
     mode = cascade_mode()
     precision_first = mode == "precision_first"
-    default_threshold = (
-        PRECISION_FIRST_THRESHOLD if precision_first else MAX_F1_THRESHOLD
-    )
+    default_threshold = PRECISION_FIRST_THRESHOLD if precision_first else MAX_F1_THRESHOLD
     default_margin = PRECISION_FIRST_MARGIN if precision_first else MAX_F1_MARGIN
     return {
         "mode": mode,
         "use_embeddings": (
-            use_embeddings
-            if use_embeddings is not None
-            else _env_flag("MATCH_USE_EMBEDDINGS", precision_first)
+            use_embeddings if use_embeddings is not None else _env_flag("MATCH_USE_EMBEDDINGS", precision_first)
         ),
         "use_reranker": (
-            use_reranker
-            if use_reranker is not None
-            else _env_flag("MATCH_USE_RERANKER", precision_first)
+            use_reranker if use_reranker is not None else _env_flag("MATCH_USE_RERANKER", precision_first)
         ),
-        "use_llm": use_llm
-        if use_llm is not None
-        else _env_flag("MATCH_USE_LLM", precision_first),
-        "llm_voting": (
-            llm_voting
-            if llm_voting is not None
-            else _env_flag("MATCH_LLM_VOTING", precision_first)
-        ),
+        "use_llm": use_llm if use_llm is not None else _env_flag("MATCH_USE_LLM", precision_first),
+        "llm_voting": (llm_voting if llm_voting is not None else _env_flag("MATCH_LLM_VOTING", precision_first)),
         "catboost_threshold": (
             catboost_threshold
             if catboost_threshold is not None
             else _env_float("MATCH_CASCADE_THRESHOLD", default_threshold)
         ),
         "margin_threshold": (
-            margin_threshold
-            if margin_threshold is not None
-            else _env_float("MATCH_CASCADE_MARGIN", default_margin)
+            margin_threshold if margin_threshold is not None else _env_float("MATCH_CASCADE_MARGIN", default_margin)
         ),
-        "review_band": (
-            review_band
-            if review_band is not None
-            else _env_float("MATCH_REVIEW_BAND", 0.08)
-        ),
+        "review_band": (review_band if review_band is not None else _env_float("MATCH_REVIEW_BAND", 0.08)),
     }
 
 
@@ -114,11 +96,7 @@ def _load_catboost(path: Path):
 def _model_path(root: Path, requested: Path | None) -> Path | None:
     if requested:
         return requested if requested.exists() else None
-    for name in (
-        "catboost_match_v3.cbm",
-        "catboost_match_v2.cbm",
-        "catboost_match.cbm",
-    ):
+    for name in ("catboost_match_v3.cbm", "catboost_match_v2.cbm", "catboost_match.cbm"):
         candidate = root / "artifacts" / "models" / name
         if candidate.exists():
             return candidate
@@ -136,9 +114,7 @@ def _model_contract(path: Path) -> tuple[list[str], dict[str, float]]:
             if isinstance(raw_fill_values, dict)
             else {}
         )
-        if isinstance(columns, list) and all(
-            isinstance(column, str) for column in columns
-        ):
+        if isinstance(columns, list) and all(isinstance(column, str) for column in columns):
             return columns, fill_values
     if path.name.endswith("_v3.cbm"):
         return FEATURE_COLS_V3, {}
@@ -153,9 +129,7 @@ def _dynamic_ensemble(out: pd.DataFrame) -> pd.Series:
     embedding = pd.to_numeric(out["emb_score"], errors="coerce")
     reranker = pd.to_numeric(out["reranker_score"], errors="coerce")
     numerator = 0.15 * rule.fillna(0) + 0.50 * catboost.fillna(0)
-    denominator = 0.15 * rule.notna().astype(float) + 0.50 * catboost.notna().astype(
-        float
-    )
+    denominator = 0.15 * rule.notna().astype(float) + 0.50 * catboost.notna().astype(float)
     numerator += 0.15 * embedding.fillna(0)
     denominator += 0.15 * embedding.notna().astype(float)
     numerator += 0.20 * reranker.fillna(0)
@@ -189,9 +163,7 @@ def apply_group_decision(
         ascending=False,
     )
     top = out["candidate_rank"] == 1
-    second_score = (
-        out[out["candidate_rank"] == 2].set_index("deal_id")["ensemble_score"].to_dict()
-    )
+    second_score = out[out["candidate_rank"] == 2].set_index("deal_id")["ensemble_score"].to_dict()
     out["score_margin"] = [
         float(score) - float(second_score.get(deal_id, 0.0))
         for deal_id, score in zip(out["deal_id"], out["ensemble_score"], strict=True)
@@ -199,18 +171,12 @@ def apply_group_decision(
     confident = (
         top
         & (out["ensemble_score"] >= threshold)
-        & (
-            (out["score_margin"] >= margin_threshold)
-            | (out.get("candidate_count", pd.Series(1, index=out.index)) <= 1)
-        )
+        & ((out["score_margin"] >= margin_threshold) | (out.get("candidate_count", pd.Series(1, index=out.index)) <= 1))
     )
     review = (
         top
         & ~confident
-        & (
-            (out["ensemble_score"] >= threshold - review_band)
-            | (out["score_margin"] < margin_threshold)
-        )
+        & ((out["ensemble_score"] >= threshold - review_band) | (out["score_margin"] < margin_threshold))
     )
     out.loc[confident, "is_match"] = True
     out.loc[confident, "match_stage"] = "ensemble"
@@ -291,10 +257,7 @@ def run_cascade(
     semantic_review = (
         ~out["is_match"]
         & (pd.to_numeric(out["emb_score"], errors="coerce") >= emb_threshold)
-        & (
-            pd.to_numeric(out["cb_score"], errors="coerce")
-            >= catboost_threshold - review_band
-        )
+        & (pd.to_numeric(out["cb_score"], errors="coerce") >= catboost_threshold - review_band)
     )
     if "candidate_rank" in out:
         semantic_review &= out["candidate_rank"] == 1
@@ -319,9 +282,7 @@ def run_cascade(
             ["deal_id", "flat_id"],
         ].set_index("deal_id")["flat_id"]
         common_deals = embedding_top.index.intersection(reranker_top.index)
-        agreement = (
-            embedding_top.loc[common_deals] == reranker_top.loc[common_deals]
-        ).to_dict()
+        agreement = (embedding_top.loc[common_deals] == reranker_top.loc[common_deals]).to_dict()
         out["model_agreement"] = out["deal_id"].map(agreement)
         disagreement = out["is_match"] & out["model_agreement"].eq(False).fillna(False)
         out.loc[disagreement, "is_match"] = False
@@ -356,20 +317,11 @@ def run_cascade(
 
 def cascade_summary(df: pd.DataFrame) -> dict[str, Any]:
     return {
-        "rows": len(df),
+        "rows": int(len(df)),
         "matched": int(df.get("is_match", pd.Series(dtype=bool)).fillna(False).sum()),
-        "review": int(
-            df.get("needs_review", pd.Series(dtype=bool)).fillna(False).sum()
-        ),
-        "llm_yes": int(
-            df.get("llm_match", pd.Series(dtype=object))
-            .fillna(False)
-            .astype(bool)
-            .sum()
-        )
+        "review": int(df.get("needs_review", pd.Series(dtype=bool)).fillna(False).sum()),
+        "llm_yes": int(df.get("llm_match", pd.Series(dtype=object)).fillna(False).astype(bool).sum())
         if "llm_match" in df.columns
         else 0,
-        "stages": df.get("match_stage", pd.Series(dtype=str))
-        .value_counts(dropna=False)
-        .to_dict(),
+        "stages": df.get("match_stage", pd.Series(dtype=str)).value_counts(dropna=False).to_dict(),
     }

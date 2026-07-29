@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, dev, Task4-lesson, Task5-6, Task7-lesson]
+    branches: [master, main, dev, Task8]
   pull_request:
 
 jobs:
@@ -29,3 +29,35 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Tests
         run: make test
+
+  migrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neolithic
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neolithic"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: pip install -e .
+      - name: Alembic upgrade
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neolithic
+        run: make migrate
