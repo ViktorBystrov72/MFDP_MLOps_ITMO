@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 
-class CoincidenceDegree(str, Enum):
+class CoincidenceDegree(StrEnum):
     FULL = "Полное совпадение"
     PART = "Частичное совпадение"
     ZERO = "Нет совпадений"

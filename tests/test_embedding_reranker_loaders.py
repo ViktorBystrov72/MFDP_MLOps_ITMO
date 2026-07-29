@@ -99,9 +99,7 @@ def test_reranker_loader_and_scores(monkeypatch):
     monkeypatch.setenv("MATCH_TORCH_COMPILE", "1")
     loaded = reranker._load_reranker("BAAI/bge-reranker-v2-m3")
     assert loaded[2] == "cpu"
-    raw, prob = reranker.reranker_scores(
-        ["q"], ["p"], model_name="BAAI/bge-reranker-v2-m3"
-    )
+    raw, prob = reranker.reranker_scores(["q"], ["p"], model_name="BAAI/bge-reranker-v2-m3")
     assert len(raw) == 1
     assert 0.0 <= float(prob[0]) <= 1.0
 

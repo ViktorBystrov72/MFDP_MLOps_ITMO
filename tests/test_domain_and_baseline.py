@@ -1,10 +1,6 @@
 import pandas as pd
 
-from matching_service.application.train import (
-    composite_score,
-    metrics_dict,
-    rule_baseline_scores,
-)
+from matching_service.application.train import composite_score, metrics_dict, rule_baseline_scores
 from matching_service.domain.features import area_diff, floor_close, rooms_equal
 
 

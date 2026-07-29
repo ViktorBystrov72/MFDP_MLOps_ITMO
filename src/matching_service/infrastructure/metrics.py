@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 
 MATCH_REQUESTS = Counter(
     "matching_requests_total",
@@ -35,7 +29,32 @@ LLM_CALLS = Counter(
     "Вызовы LiteLLM для сложных кейсов",
     ["status"],
 )
+LLM_TOKENS = Counter(
+    "matching_llm_tokens_total",
+    "Токены LiteLLM по типу",
+    ["type"],
+)
+LLM_COST = Counter(
+    "matching_llm_cost_dollars_total",
+    "Локально учтённая стоимость LiteLLM",
+)
+MATCH_CANDIDATES = Histogram(
+    "matching_candidates_per_deal",
+    "Число кандидатов на сделку",
+    buckets=(1, 2, 3, 5, 10, 20, 30, 50, 100),
+)
+MATCH_MARGIN = Histogram(
+    "matching_top1_margin",
+    "Отрыв top-1 от второго кандидата",
+    buckets=(0.0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0),
+)
+MATCH_INPUTS = Counter(
+    "matching_inputs_total",
+    "Наличие критичных входных признаков",
+    ["signal", "status"],
+)
 MODEL_LOADED = Gauge("matching_model_loaded", "1 если CatBoost загружен")
+MODEL_INFO = Info("matching_model", "Версия и контракт модели")
 
 
 def metrics_response() -> tuple[bytes, str]:

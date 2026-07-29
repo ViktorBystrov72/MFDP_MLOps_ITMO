@@ -1,0 +1,15 @@
+FROM apache/airflow:2.10.4-python3.12
+
+USER airflow
+ARG AIRFLOW_CONSTRAINTS=https://raw.githubusercontent.com/apache/airflow/constraints-2.10.4/constraints-3.12.txt
+RUN pip install --no-cache-dir \
+    pandas \
+    pyarrow \
+    scikit-learn \
+    catboost \
+    mlflow-skinny==2.19.0 \
+    psycopg2-binary \
+    rapidfuzz \
+    sentence-transformers \
+    prometheus-client \
+    --constraint "${AIRFLOW_CONSTRAINTS}"

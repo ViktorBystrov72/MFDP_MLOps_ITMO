@@ -64,9 +64,7 @@ def prepare_features(
         x[column] = pd.to_numeric(x[column], errors="coerce")
     if fill_values is None:
         medians = x.median(numeric_only=True).fillna(0)
-        fill_values = {
-            column: float(medians.get(column, 0.0)) for column in feature_cols
-        }
+        fill_values = {column: float(medians.get(column, 0.0)) for column in feature_cols}
     x = x.fillna(pd.Series(fill_values)).fillna(0)
     return x, fill_values
 
@@ -78,9 +76,7 @@ def metrics_dict(y_true, y_prob, threshold: float = 0.5) -> dict[str, float]:
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
         "pr_auc": float(average_precision_score(y_true, y_prob)),
-        "roc_auc": float(roc_auc_score(y_true, y_prob))
-        if len(np.unique(y_true)) > 1
-        else 0.0,
+        "roc_auc": float(roc_auc_score(y_true, y_prob)) if len(np.unique(y_true)) > 1 else 0.0,
     }
 
 
@@ -155,28 +151,18 @@ def _try_mlflow_log(
                 try:
                     client = mlflow.tracking.MlflowClient()
                     client.create_registered_model(registered_name)
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass  # уже существует
                 mv = mlflow.register_model(model_uri, registered_name)
                 try:
                     client = mlflow.tracking.MlflowClient()
-                    client.set_registered_model_alias(
-                        registered_name, stage, mv.version
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "MLflow alias set failed for %s: %s", registered_name, exc
-                    )
-                logger.info(
-                    "registered %s v%s as %s@%s",
-                    registered_name,
-                    mv.version,
-                    registered_name,
-                    stage,
-                )
+                    client.set_registered_model_alias(registered_name, stage, mv.version)
+                except Exception as exc:
+                    logger.warning("MLflow alias set failed for %s: %s", registered_name, exc)
+                logger.info("registered %s v%s as %s@%s", registered_name, mv.version, registered_name, stage)
                 return str(mv.version)
         return None
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("MLflow logging failed for %s: %s", run_name, exc)
         return None
 
@@ -194,7 +180,7 @@ def train_and_evaluate(
             os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
             mlflow.set_tracking_uri(mlflow_uri)
             mlflow.set_experiment(experiment)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("MLflow setup failed: %s", exc)
 
     feature_cols = select_feature_columns(train_df)
@@ -224,12 +210,7 @@ def train_and_evaluate(
         "logistic": Pipeline(
             [
                 ("scaler", StandardScaler()),
-                (
-                    "clf",
-                    LogisticRegression(
-                        max_iter=1000, class_weight="balanced", random_state=42
-                    ),
-                ),
+                ("clf", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
             ]
         ),
         "random_forest": RandomForestClassifier(
@@ -266,11 +247,7 @@ def train_and_evaluate(
             m.update(ranking_metrics(holdout_df, prob))
         results[name] = m
         if name == "catboost":
-            path = model_dir / (
-                "catboost_match_v3.cbm"
-                if feature_cols == FEATURE_COLS_V3
-                else "catboost_match.cbm"
-            )
+            path = model_dir / ("catboost_match_v3.cbm" if feature_cols == FEATURE_COLS_V3 else "catboost_match.cbm")
             model.save_model(str(path))
             metadata = {
                 "model": name,
@@ -278,17 +255,10 @@ def train_and_evaluate(
                 "fill_values": fill_values,
                 "train_rows": len(train_df),
                 "holdout_rows": len(holdout_df),
-                "label_source": sorted(
-                    train_df.get("label_source", pd.Series(dtype=str))
-                    .dropna()
-                    .unique()
-                    .tolist()
-                ),
+                "label_source": sorted(train_df.get("label_source", pd.Series(dtype=str)).dropna().unique().tolist()),
             }
             metadata_path = path.with_suffix(".json")
-            metadata_path.write_text(
-                json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
             version = _try_mlflow_log(
                 name,
                 m,
@@ -299,9 +269,7 @@ def train_and_evaluate(
             )
             if version:
                 metadata["mlflow_registered_version"] = version
-                metadata_path.write_text(
-                    json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
+                metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
             _try_mlflow_log(
                 f"{name}_metadata",
                 {},
@@ -311,12 +279,8 @@ def train_and_evaluate(
             _try_mlflow_log(name, m, params={"features": ",".join(feature_cols)})
 
     if "deal_id" in train_df and "deal_id" in holdout_df:
-        train_order = train_df.assign(_row=np.arange(len(train_df))).sort_values(
-            "deal_id"
-        )
-        holdout_order = holdout_df.assign(_row=np.arange(len(holdout_df))).sort_values(
-            "deal_id"
-        )
+        train_order = train_df.assign(_row=np.arange(len(train_df))).sort_values("deal_id")
+        holdout_order = holdout_df.assign(_row=np.arange(len(holdout_df))).sort_values("deal_id")
         rank_x_train = x_train.iloc[train_order["_row"].to_numpy()]
         rank_y_train = y_train.iloc[train_order["_row"].to_numpy()]
         rank_x_hold = x_hold.iloc[holdout_order["_row"].to_numpy()]
@@ -330,11 +294,7 @@ def train_and_evaluate(
             random_seed=42,
             train_dir=str(catboost_train_dir),
         )
-        ranker.fit(
-            rank_x_train,
-            rank_y_train,
-            group_id=np.repeat(np.arange(len(train_group)), train_group),
-        )
+        ranker.fit(rank_x_train, rank_y_train, group_id=np.repeat(np.arange(len(train_group)), train_group))
         rank_scores_ordered = ranker.predict(rank_x_hold)
         rank_scores = np.empty(len(rank_scores_ordered), dtype=float)
         rank_scores[holdout_order["_row"].to_numpy()] = rank_scores_ordered

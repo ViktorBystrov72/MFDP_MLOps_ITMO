@@ -1,33 +1,33 @@
 [project]
 name = "matching-service"
-version = "0.1.0"
+version = "0.3.0"
 description = "Neolithic exposition-deal matching MLOps service"
 requires-python = ">=3.11"
 dependencies = [
-  "pandas",
-  "pyarrow",
-  "sqlalchemy",
-  "psycopg2-binary",
-  "openpyxl",
-  "scikit-learn",
+  "alembic",
   "catboost",
-  "mlflow",
   "fastapi",
-  "uvicorn",
-  "streamlit",
-  "python-dotenv",
-  "rapidfuzz",
-  "pydantic",
-  "python-pptx",
   "httpx",
+  "mlflow",
+  "openpyxl",
+  "pandas",
   "prometheus-client",
+  "psycopg2-binary",
+  "pyarrow",
+  "pydantic",
+  "python-dotenv",
+  "python-pptx",
+  "rapidfuzz",
+  "requests",
+  "scikit-learn",
   "sentence-transformers",
-  "torch",
-  "transformers",
+  "sqlalchemy",
+  "streamlit",
+  "uvicorn",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "jupyter", "nbformat"]
+dev = ["coverage", "jupyter", "nbformat", "pytest", "pytest-cov", "ruff"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -35,3 +35,39 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: read-only integration tests requiring the PostgreSQL snapshot",
+]
+addopts = "--cov=matching_service --cov-report=term-missing --cov-fail-under=90"
+
+[tool.coverage.run]
+source = ["matching_service"]
+branch = false
+omit = [
+  "*/presentation/ui_streamlit.py",
+  "*/presentation/location_api.py",
+]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+include = [
+  "alembic/**/*.py",
+  "src/**/*.py",
+  "scripts/**/*.py",
+  "tests/**/*.py",
+  "dags/**/*.py",
+]
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

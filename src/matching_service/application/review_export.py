@@ -69,8 +69,6 @@ def export_review_queue(
             "llm_cluster_flat_ids",
         }
     ]
-    export = (
-        review[columns + extra] if not review.empty else pd.DataFrame(columns=columns)
-    )
+    export = review[columns + extra] if not review.empty else pd.DataFrame(columns=columns)
     export.to_csv(target, index=False)
     return target

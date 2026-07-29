@@ -65,7 +65,7 @@ def _load_bge_model(model_name: str):
 
 def _embed_bge_cls(texts: list[str], model_name: str) -> np.ndarray:
     import torch
-    from torch.nn import functional
+    import torch.nn.functional as functional
 
     tokenizer, model, device = _load_bge_model(model_name)
     batch_size = int(os.getenv("MATCH_EMBEDDING_BATCH_SIZE", "64"))
@@ -90,9 +90,7 @@ def embed_texts(texts: list[str], model_name: str | None = None) -> np.ndarray:
     selected_model = model_name or DEFAULT_MODEL
     cleaned = [str(t or "").strip() or " " for t in texts]
     backend = os.getenv("MATCH_EMBEDDING_BACKEND", "auto")
-    if backend == "bge-cls" or (
-        backend == "auto" and "bge-m3" in selected_model.lower()
-    ):
+    if backend == "bge-cls" or (backend == "auto" and "bge-m3" in selected_model.lower()):
         return _embed_bge_cls(cleaned, selected_model)
     model = _load_sentence_model(selected_model)
     vectors = model.encode(
@@ -104,15 +102,11 @@ def embed_texts(texts: list[str], model_name: str | None = None) -> np.ndarray:
     return np.asarray(vectors, dtype=np.float32)
 
 
-def cosine_pair_scores(
-    left: list[str], right: list[str], model_name: str | None = None
-) -> np.ndarray:
+def cosine_pair_scores(left: list[str], right: list[str], model_name: str | None = None) -> np.ndarray:
     """Return cosine similarity for aligned deal/listing text pairs."""
     if len(left) != len(right):
         raise ValueError("left and right must contain the same number of rows")
-    uniq = list(
-        dict.fromkeys([str(value or "").strip() or " " for value in [*left, *right]])
-    )
+    uniq = list(dict.fromkeys([str(value or "").strip() or " " for value in [*left, *right]]))
     mat = embed_texts(uniq, model_name=model_name)
     idx = {t: i for i, t in enumerate(uniq)}
     li = np.array([idx[str(x or "").strip() or " "] for x in left])

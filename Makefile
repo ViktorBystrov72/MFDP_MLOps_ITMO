@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-SRC_DIRS := src scripts tests
+SRC_DIRS := src scripts tests dags alembic
 VENV_ACTIVATE := $(firstword $(wildcard .venv/bin/activate venv/bin/activate))
 ifeq ($(VENV_ACTIVATE),)
   RUN =
@@ -19,3 +19,5 @@ fix:
 test:
 	$(RUN) export PYTHONPATH="$(CURDIR)/src:$$PYTHONPATH" && pytest tests
 
+migrate:
+	$(RUN) alembic -c alembic/alembic.ini upgrade head
