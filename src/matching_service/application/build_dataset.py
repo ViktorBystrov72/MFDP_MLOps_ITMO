@@ -7,7 +7,9 @@ import pandas as pd
 ARTIFACTS = Path(__file__).resolve().parents[3] / "artifacts" / "datasets"
 
 
-def load_tyumen_frames(artifacts_dir: Path | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_tyumen_frames(
+    artifacts_dir: Path | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     root = artifacts_dir or ARTIFACTS
     deals = pd.read_csv(root / "tyumen_deals.csv", low_memory=False)
     flats = pd.read_csv(root / "tyumen_flats.csv", low_memory=False)
@@ -46,11 +48,19 @@ def build_pair_dataset(
         b = deal_build.get(deal_id)
         if b is None or b == "nan" or b not in flats_by_building:
             continue
-        candidates = [fid for fid in flats_by_building[b] if (str(deal_id), str(fid)) not in pos_keys]
+        candidates = [
+            fid
+            for fid in flats_by_building[b]
+            if (str(deal_id), str(fid)) not in pos_keys
+        ]
         if not candidates:
             continue
         n = min(len(candidates), max_neg_per_deal)
-        chosen = pd.Series(candidates).sample(n=n, random_state=abs(hash(str(deal_id))) % (2**32)).tolist()
+        chosen = (
+            pd.Series(candidates)
+            .sample(n=n, random_state=abs(hash(str(deal_id))) % (2**32))
+            .tolist()
+        )
         for flat_id in chosen:
             neg_rows.append(
                 {
@@ -66,7 +76,16 @@ def build_pair_dataset(
     neg = pd.DataFrame(neg_rows)
     pairs = pd.concat(
         [
-            pos[["deal_id", "flat_id", "label", "label_source", "coincidence_degree", "concat_fields"]],
+            pos[
+                [
+                    "deal_id",
+                    "flat_id",
+                    "label",
+                    "label_source",
+                    "coincidence_degree",
+                    "concat_fields",
+                ]
+            ],
             neg,
         ],
         ignore_index=True,
@@ -74,7 +93,9 @@ def build_pair_dataset(
     return _finalize_features(pairs, deals, flats)
 
 
-def _finalize_features(pairs: pd.DataFrame, deals: pd.DataFrame, flats: pd.DataFrame) -> pd.DataFrame:
+def _finalize_features(
+    pairs: pd.DataFrame, deals: pd.DataFrame, flats: pd.DataFrame
+) -> pd.DataFrame:
     d = deals.rename(
         columns={
             "building_id": "building_id_deal",
@@ -92,9 +113,12 @@ def _finalize_features(pairs: pd.DataFrame, deals: pd.DataFrame, flats: pd.DataF
     out = pairs.merge(d, on="deal_id", how="left").merge(f, on="flat_id", how="left")
 
     out["area_diff"] = (
-        pd.to_numeric(out["area_deal"], errors="coerce") - pd.to_numeric(out["area_exp"], errors="coerce")
+        pd.to_numeric(out["area_deal"], errors="coerce")
+        - pd.to_numeric(out["area_exp"], errors="coerce")
     ).abs()
-    out["same_building"] = (out["building_id_deal"].astype(str) == out["building_id_exp"].astype(str)).astype(int)
+    out["same_building"] = (
+        out["building_id_deal"].astype(str) == out["building_id_exp"].astype(str)
+    ).astype(int)
     flat_d = out["flat_number_deal"].fillna("").astype(str).str.strip()
     flat_e = out["flat_number_exp"].fillna("").astype(str).str.strip()
     out["same_flat_number"] = ((flat_d != "") & (flat_d == flat_e)).astype(int)
@@ -112,7 +136,9 @@ def _finalize_features(pairs: pd.DataFrame, deals: pd.DataFrame, flats: pd.DataF
     return out
 
 
-def temporal_split(df: pd.DataFrame, holdout_from: str = "2025-07-01") -> tuple[pd.DataFrame, pd.DataFrame]:
+def temporal_split(
+    df: pd.DataFrame, holdout_from: str = "2025-07-01"
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     dt = pd.to_datetime(df["contract_date"], errors="coerce")
     cut = pd.Timestamp(holdout_from)
     return df[dt < cut].copy(), df[dt >= cut].copy()
@@ -130,14 +156,16 @@ def save_dataset(df: pd.DataFrame, out_dir: Path) -> dict[str, Path]:
     df.to_parquet(paths["all"], index=False)
     train.to_parquet(paths["train"], index=False)
     holdout.to_parquet(paths["holdout"], index=False)
-    df.sample(n=min(5000, len(df)), random_state=42).to_csv(paths["all_csv"], index=False)
+    df.sample(n=min(5000, len(df)), random_state=42).to_csv(
+        paths["all_csv"], index=False
+    )
     meta = out_dir / "dataset_stats.txt"
     meta.write_text(
         "\n".join(
             [
                 f"rows={len(df)}",
                 f"positives={int(df['label'].sum())}",
-                f"negatives={int((df['label']==0).sum())}",
+                f"negatives={int((df['label'] == 0).sum())}",
                 f"train={len(train)}",
                 f"holdout={len(holdout)}",
                 f"holdout_positives={int(holdout['label'].sum()) if len(holdout) else 0}",
