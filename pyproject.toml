@@ -22,6 +22,8 @@ dependencies = [
   "httpx",
   "prometheus-client",
   "sentence-transformers",
+  "torch",
+  "transformers",
 ]
 
 [project.optional-dependencies]

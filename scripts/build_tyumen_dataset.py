@@ -16,7 +16,9 @@ def main() -> None:
     deals, flats, concat = load_tyumen_frames()
     print(f"deals={len(deals)} flats={len(flats)} concat={len(concat)}")
     pairs = build_pair_dataset(deals, flats, concat)
-    print(f"pairs={len(pairs)} positives={int(pairs['label'].sum())} negatives={int((pairs['label']==0).sum())}")
+    print(
+        f"pairs={len(pairs)} positives={int(pairs['label'].sum())} negatives={int((pairs['label'] == 0).sum())}"
+    )
     paths = save_dataset(pairs, out)
     for k, p in paths.items():
         print(f"{k}: {p} ({p.stat().st_size} bytes)")

@@ -1,0 +1,295 @@
+# Запуск из корня репо:
+#   docker compose -f devops/docker-compose.yml up --build
+# Контекст сборки — корень репозитория (..).
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    image: matching-service:0.3.0
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app/src
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - POSTGRES_HOST=${POSTGRES_HOST:-host.docker.internal}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-neolithic}
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://litellm.prod.liris.team.corp}
+      - MATCH_LLM_MODEL=${MATCH_LLM_MODEL:-}
+      - MATCH_LLM_MODELS=${MATCH_LLM_MODELS:-}
+      - MATCH_LLM_VOTING=${MATCH_LLM_VOTING:-1}
+      - MATCH_CASCADE_MODE=${MATCH_CASCADE_MODE:-precision_first}
+      - MATCH_CASCADE_THRESHOLD=${MATCH_CASCADE_THRESHOLD:-0.95}
+      - MATCH_CASCADE_MARGIN=${MATCH_CASCADE_MARGIN:-0.05}
+      - MATCH_REVIEW_BAND=${MATCH_REVIEW_BAND:-0.08}
+      - MATCH_USE_EMBEDDINGS=${MATCH_USE_EMBEDDINGS:-1}
+      - MATCH_USE_RERANKER=${MATCH_USE_RERANKER:-1}
+      - MATCH_USE_LLM=${MATCH_USE_LLM:-1}
+      - MATCH_LLM_MAX_CANDIDATES=${MATCH_LLM_MAX_CANDIDATES:-3}
+      - MATCH_LLM_TEXT_LIMIT=${MATCH_LLM_TEXT_LIMIT:-800}
+      - MATCH_EMBEDDING_MODEL=${MATCH_EMBEDDING_MODEL:-/models/neolithic-ml/bge-m3}
+      - MATCH_EMBEDDING_BACKEND=${MATCH_EMBEDDING_BACKEND:-bge-cls}
+      - MATCH_RERANKER_MODEL=${MATCH_RERANKER_MODEL:-/models/neolithic-ml/bge-reranker-v2-m3}
+      - MATCH_TORCH_COMPILE=${MATCH_TORCH_COMPILE:-0}
+    volumes:
+      - ../artifacts:/app/artifacts
+      - ../mlruns:/app/mlruns
+      - hf-cache:/root/.cache/huggingface
+      - ${NEOLITHIC_ML_REPO_PATH:-../artifacts/neolithic-ml}/models:/models/neolithic-ml:ro
+    depends_on:
+      mlflow:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - matching-net
+
+  ml_worker:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    image: matching-service:0.3.0
+    command:
+      [
+        "python",
+        "scripts/run_cascade_batch.py",
+        "--limit",
+        "100",
+      ]
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app/src
+      - MATCH_USE_EMBEDDINGS=${MATCH_USE_EMBEDDINGS:-1}
+      - MATCH_USE_RERANKER=${MATCH_USE_RERANKER:-1}
+      - MATCH_USE_LLM=${MATCH_USE_LLM:-1}
+      - MATCH_LLM_MAX_CANDIDATES=${MATCH_LLM_MAX_CANDIDATES:-5}
+      - MATCH_LLM_TEXT_LIMIT=${MATCH_LLM_TEXT_LIMIT:-800}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MATCH_EMBEDDING_MODEL=${MATCH_EMBEDDING_MODEL:-/models/neolithic-ml/bge-m3}
+      - MATCH_EMBEDDING_BACKEND=${MATCH_EMBEDDING_BACKEND:-bge-cls}
+      - MATCH_RERANKER_MODEL=${MATCH_RERANKER_MODEL:-/models/neolithic-ml/bge-reranker-v2-m3}
+      - MATCH_TORCH_COMPILE=${MATCH_TORCH_COMPILE:-0}
+      - POSTGRES_HOST=${POSTGRES_HOST:-host.docker.internal}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-neolithic}
+    volumes:
+      - ../artifacts:/app/artifacts
+      - ../scripts:/app/scripts
+      - hf-cache:/root/.cache/huggingface
+      - ${NEOLITHIC_ML_REPO_PATH:-../artifacts/neolithic-ml}/models:/models/neolithic-ml:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - matching-net
+    profiles: ["batch"]
+
+  location_matcher:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    image: matching-service:0.3.0
+    profiles: ["models"]
+    working_dir: /opt/neolithic-ml
+    command:
+      [
+        "uvicorn",
+        "matching_service.presentation.location_api:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+      ]
+    environment:
+      - PYTHONPATH=/app/src:/opt/neolithic-ml
+      - MATCH_TORCH_COMPILE=${MATCH_TORCH_COMPILE:-0}
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${NEOLITHIC_ML_REPO_PATH:-../artifacts/neolithic-ml}:/opt/neolithic-ml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    networks:
+      - matching-net
+
+  ui:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    image: matching-service:0.3.0
+    command:
+      [
+        "streamlit",
+        "run",
+        "src/matching_service/presentation/ui_streamlit.py",
+        "--server.port=8501",
+        "--server.address=0.0.0.0",
+      ]
+    environment:
+      - MATCHING_API_URL=http://api:8000
+      - PYTHONPATH=/app/src
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ../src:/app/src
+      - ../artifacts:/app/artifacts
+    networks:
+      - matching-net
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.19.0
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+      - ../mlruns:/mlflow/artifacts
+    networks:
+      - matching-net
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - matching-net
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      - minio
+    profiles: ["storage"]
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minio} $${MINIO_ROOT_PASSWORD:-minio123};
+      mc mb -p local/matching-datasets || true;
+      mc mb -p local/matching-artifacts || true;
+      "
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minio123}
+    networks:
+      - matching-net
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+    networks:
+      - matching-net
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - matching-net
+
+  airflow:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile.airflow
+    image: matching-airflow:2.10.4
+    profiles: ["airflow"]
+    command: standalone
+    ports:
+      - "8081:8080"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
+      MLOPS_ROOT: /opt/airflow/project
+      PYTHONPATH: /opt/airflow/project:/opt/airflow/project/src
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MATCH_USE_EMBEDDINGS: ${MATCH_USE_EMBEDDINGS:-1}
+      MATCH_USE_RERANKER: ${MATCH_USE_RERANKER:-1}
+      MATCH_USE_LLM: ${MATCH_USE_LLM:-1}
+      MATCH_LLM_MAX_CANDIDATES: ${MATCH_LLM_MAX_CANDIDATES:-5}
+      MATCH_LLM_TEXT_LIMIT: ${MATCH_LLM_TEXT_LIMIT:-800}
+      MATCH_EMBEDDING_MODEL: ${MATCH_EMBEDDING_MODEL:-/models/neolithic-ml/bge-m3}
+      MATCH_EMBEDDING_BACKEND: ${MATCH_EMBEDDING_BACKEND:-bge-cls}
+      MATCH_RERANKER_MODEL: ${MATCH_RERANKER_MODEL:-/models/neolithic-ml/bge-reranker-v2-m3}
+      MATCH_TORCH_COMPILE: ${MATCH_TORCH_COMPILE:-0}
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-neolithic}
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ..:/opt/airflow/project
+      - airflow-data:/opt/airflow
+      - hf-cache:/home/airflow/.cache/huggingface
+      - ${NEOLITHIC_ML_REPO_PATH:-../artifacts/neolithic-ml}/models:/models/neolithic-ml:ro
+    depends_on:
+      - mlflow
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - matching-net
+
+volumes:
+  mlflow-data:
+  minio-data:
+  grafana-data:
+  airflow-data:
+  hf-cache:
+
+networks:
+  matching-net:
+    driver: bridge

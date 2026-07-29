@@ -23,7 +23,9 @@ def main() -> None:
         train = pd.concat(
             [
                 train[train["label"] == 1],
-                train[train["label"] == 0].sample(n=min(40000, (train["label"] == 0).sum()), random_state=42),
+                train[train["label"] == 0].sample(
+                    n=min(40000, (train["label"] == 0).sum()), random_state=42
+                ),
             ]
         )
     mlruns = root / "artifacts" / "mlflow.db"
